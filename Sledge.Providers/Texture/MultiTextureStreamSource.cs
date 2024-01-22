@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 
 namespace Sledge.Providers.Texture
 {
@@ -22,7 +23,7 @@ namespace Sledge.Providers.Texture
 
         public Task<Bitmap> GetImage(string item, int maxWidth, int maxHeight)
         {
-            return _streams.FirstOrDefault(x => x.HasImage(item))?.GetImage(item, maxWidth, maxHeight);
+            return _streams.FirstOrDefault(x => (x.HasImage(item) || x.HasImage("materials/" + item + ".vtf")))?.GetImage(item, maxWidth, maxHeight);
         }
 
         public void Dispose()

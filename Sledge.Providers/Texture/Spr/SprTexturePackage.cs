@@ -71,6 +71,9 @@ namespace Sledge.Providers.Texture.Spr
             return textures.FirstOrDefault();
         }
 
+        public override string GetDisplayName(TexturePackageReference reference) => reference.Name;
+        public override string GetPathFromDisplay(string name) => name;
+
         public override ITextureStreamSource GetStreamSource()
         {
             return new SprStreamSource(_file);

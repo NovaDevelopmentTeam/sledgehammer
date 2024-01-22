@@ -1,14 +1,19 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Windows.Forms;
+using Sledge.BspEditor.Primitives.MapObjects;
 using Sledge.Common.Translations;
 using Sledge.DataStructures.GameData;
 using Sledge.FileSystem;
+using Sledge.Packages;
+using Sledge.Packages.Vpk;
 using Sledge.Providers.GameData;
 using Sledge.Providers.Texture;
+using Sledge.Providers.Texture.Vtf;
 using Sledge.Shell;
 
 namespace Sledge.BspEditor.Environment.Goldsource
@@ -21,7 +26,7 @@ namespace Sledge.BspEditor.Environment.Goldsource
         private readonly IGameDataProvider _fgdProvider = Common.Container.Get<IGameDataProvider>("Fgd");
         private readonly ITexturePackageProvider _wadProvider = Common.Container.Get<ITexturePackageProvider>("Wad3");
 
-        private string[] _initialWadFiles = null;
+        private string[] _initialPackageFiles = null;
 
         public IEnvironment Environment
         {
@@ -159,16 +164,16 @@ namespace Sledge.BspEditor.Environment.Goldsource
 
             nudDefaultTextureScale.Value = env.DefaultTextureScale;
 
-            List<string> initialWadFiles = new List<string>();
+            List<string> initialPackageFiles = new List<string>();
 
             cklTexturePackages.Items.Clear();
             foreach (var exc in env.ExcludedWads)
             {
                 cklTexturePackages.Items.Add(exc, false); // all wads not in this list will be excluded
-                initialWadFiles.Add(exc);
+                initialPackageFiles.Add(exc);
             }
             UpdateTexturePackages();
-            _initialWadFiles = initialWadFiles.ToArray();
+            _initialPackageFiles = initialPackageFiles.ToArray();
 
             lstAdditionalTextures.Items.Clear();
             foreach (var fileName in env.AdditionalTextureFiles)
@@ -486,7 +491,6 @@ namespace Sledge.BspEditor.Environment.Goldsource
             }
 
             directories = directories.Distinct().Where(Directory.Exists).ToList();
-
             if (directories.Any())
             {
                 try
@@ -516,18 +520,18 @@ namespace Sledge.BspEditor.Environment.Goldsource
             }
             cklTexturePackages.BeginUpdate();
 
-            var initialWadFiles = new List<string>();
+            var initialPackageFiles = new List<string>();
 
             cklTexturePackages.Items.Clear();
             foreach (var kv in state.OrderBy(x => x.Key, StringComparer.InvariantCultureIgnoreCase))
             {
                 cklTexturePackages.Items.Add(kv.Key, kv.Value);
-                initialWadFiles.Add(kv.Key);
+                initialPackageFiles.Add(kv.Key);
             }
 
             cklTexturePackages.EndUpdate();
 
-            _initialWadFiles = initialWadFiles.ToArray();
+            _initialPackageFiles = initialPackageFiles.ToArray();
         }
 
         private void ToggleAllTextures(object sender, EventArgs e)
@@ -582,7 +586,7 @@ namespace Sledge.BspEditor.Environment.Goldsource
 
 		private void FilterBox_TextChanged(object sender, EventArgs e)
 		{
-            var newCkList = _initialWadFiles;
+            var newCkList = _initialPackageFiles;
             var filteredList = newCkList.Where(x => x.Contains((sender as TextBox).Text)).ToList();
 
             cklTexturePackages.Items.Clear();

@@ -48,6 +48,7 @@
     <Reference Include="System.ComponentModel.Composition" />
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
+    <Reference Include="System.Numerics" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Colour.cs" />
@@ -130,6 +131,7 @@
     <Compile Include="Transport\SerialisedObjectExtensions.cs" />
     <Compile Include="Transport\SerialisedObjectFormatter.cs" />
     <Compile Include="ValidAssembliesInDirectoryContainer.cs" />
+    <Compile Include="Vector3TypeConverter.cs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="LogicAndTrick.Oy">
@@ -139,7 +141,12 @@
       <Version>11.0.2</Version>
     </PackageReference>
   </ItemGroup>
-  <ItemGroup />
+  <ItemGroup>
+    <ProjectReference Include="..\Sledge.DataStructures\Sledge.DataStructures.csproj">
+      <Project>{26a974c9-e495-4fa3-8e87-1e00019d04f5}</Project>
+      <Name>Sledge.DataStructures</Name>
+    </ProjectReference>
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

@@ -636,7 +636,7 @@ namespace Sledge.BspEditor.Tools.Texture
                 g.DrawString(TextureName, Font, Brushes.White, x + 1, y + Size.Height - FontHeight - Padding);
 
                 // Draw the image (if it's loaded)
-                if (_bitmapTask != null && _bitmapTask.IsCompleted)
+                if (_bitmapTask != null && _bitmapTask.IsCompleted && _bitmapTask.Status == TaskStatus.RanToCompletion)
                 {
                     var img = _bitmapTask.Result;
                     if (img != null)

@@ -30,7 +30,10 @@ namespace Sledge.Providers.Texture
         public abstract Task<TextureItem> GetTexture(string name);
 
         public abstract ITextureStreamSource GetStreamSource();
-        
+
+        public abstract string GetDisplayName(TexturePackageReference reference);
+        public abstract string GetPathFromDisplay(string name);
+
         public override string ToString()
         {
             return Location;

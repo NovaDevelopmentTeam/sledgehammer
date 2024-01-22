@@ -1,6 +1,6 @@
-﻿namespace Sledge.Providers.Texture.Vtf
+﻿namespace Sledge.Formats.Texture.Vtf
 {
-    public enum VtfImageFormat : int
+    public enum VtfImageFormat
     {
         None = -1,
         Rgba8888 = 0,

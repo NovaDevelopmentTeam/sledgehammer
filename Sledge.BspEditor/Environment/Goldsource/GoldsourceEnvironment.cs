@@ -8,6 +8,7 @@ using System.Reflection;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using LogicAndTrick.Oy;
+using Sledge.Packages;
 using Sledge.BspEditor.Compile;
 using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Primitives;
@@ -23,6 +24,9 @@ using Sledge.FileSystem;
 using Sledge.Providers.GameData;
 using Sledge.Providers.Texture;
 using Path = System.IO.Path;
+using Sledge.Packages.Vpk;
+using Sledge.Providers.Texture.Vtf;
+using Veldrid;
 
 namespace Sledge.BspEditor.Environment.Goldsource
 {
@@ -155,10 +159,31 @@ namespace Sledge.BspEditor.Environment.Goldsource
             var extraWads = AdditionalTextureFiles.SelectMany(x => _wadProvider.GetPackagesInFile(new NativeFile(x)));
             var wads = await _wadProvider.GetTexturePackages(wadRefs.Union(extraWads));
 
+            //Debug.WriteLine("Searching for Vpks in: "+Path.Combine(BaseDirectory, Root.Name));
+            List<TexturePackage> texList = new List<TexturePackage>();
+            foreach (string subFile in Directory.EnumerateFiles(Path.Combine(BaseDirectory, Root.Name), "*_dir.vpk")) {
+                //Debug.WriteLine("Root path: " + Path.Combine(BaseDirectory, Root.Name, subFile));
+
+                string filePath = Path.Combine(BaseDirectory, Root.Name, subFile);
+                InlinePackageFile vpkFile = new InlinePackageFile(filePath);
+                var vpkDir = new VpkDirectory(new FileInfo(filePath));
+
+                List<TexturePackageReference> textures = new List<TexturePackageReference>();
+                foreach (string vpk in vpkDir.GetFiles())
+                {
+                    if (!vpk.EndsWith(".vtf")) continue;
+                    textures.Add(new TexturePackageReference(vpk, vpkFile));
+                    //Debug.WriteLine("\t ["+ filePath + "] - " + vpk);
+                }
+                var vtfPack = new VtfTexturePackage(vpkFile, textures.ToArray());
+                if (vtfPack.Textures.Count > 1)
+                    texList.Add(vtfPack);
+            }
+
             var spriteRefs = _spriteProvider.GetPackagesInFile(Root);
             var sprites = await _spriteProvider.GetTexturePackages(spriteRefs);
 
-            return new GoldsourceTextureCollection(wads.Union(sprites));
+            return new GoldsourceTextureCollection(wads.Union(sprites).Union(texList));
         }
 
         private Task<GameData> MakeGameDataAsync()

@@ -14,7 +14,7 @@ namespace Sledge.BspEditor.Environment.Goldsource
         public override IEnumerable<string> GetBrowsableTextures()
         {
             var hs = new HashSet<string>();
-            foreach (var pack in Packages.Where(x => x.Type == "Wad3")) hs.UnionWith(pack.Textures);
+            foreach (var pack in Packages.Where(x => (x.Type == "Wad3" || x.Type == "Vtf" || x.Type == "Vpk"))) hs.UnionWith(pack.Textures);
             return hs;
         }
 
@@ -25,7 +25,8 @@ namespace Sledge.BspEditor.Environment.Goldsource
 
         public override IEnumerable<string> GetSpriteTextures()
         {
-            return Packages.Where(x => string.Equals(x.Location, "sprites", StringComparison.InvariantCultureIgnoreCase)).SelectMany(x => x.Textures);
+            return Packages.Where(x => string.Equals(x.Location, "sprites", StringComparison.InvariantCultureIgnoreCase) 
+                                    || string.Equals(x.Location, "materials", StringComparison.InvariantCultureIgnoreCase)).SelectMany(x => x.Textures);
         }
 
         public override bool IsNullTexture(string name)

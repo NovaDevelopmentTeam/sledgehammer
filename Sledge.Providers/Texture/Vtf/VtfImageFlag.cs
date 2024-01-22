@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Sledge.Providers.Texture.Vtf
+namespace Sledge.Formats.Texture.Vtf
 {
     [Flags]
     public enum VtfImageFlag : uint

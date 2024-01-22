@@ -6,7 +6,7 @@ using System.Numerics;
 using System.Threading.Tasks;
 using Sledge.Common.Shell.Hooks;
 
-namespace Sledge.DataStructures.Geometric
+namespace Sledge.Common
 {
     [Export(typeof(IInitialiseHook))]
     public class Vector3TypeConverter : TypeConverter, IInitialiseHook

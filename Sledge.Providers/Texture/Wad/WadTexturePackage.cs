@@ -68,6 +68,9 @@ namespace Sledge.Providers.Texture.Wad
             return new TextureItem(entry.Name, GetFlags(entry), (int) entry.Width, (int) entry.Height, wp.File.Name);
         }
 
+        public override string GetDisplayName(TexturePackageReference reference) => reference.Name;
+        public override string GetPathFromDisplay(string name) => name;
+
         public override ITextureStreamSource GetStreamSource()
         {
             return new WadStreamSource(_file);

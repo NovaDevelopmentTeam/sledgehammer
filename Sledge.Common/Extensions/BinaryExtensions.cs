@@ -1,7 +1,9 @@
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Numerics;
 using System.Text;
+using Plane = Sledge.DataStructures.Geometric.Plane;
 
 namespace Sledge.Common.Extensions
 {
@@ -54,7 +56,7 @@ namespace Sledge.Common.Extensions
             }
             return str;
         }
-
+         
         /// <summary>
         /// Write a string followed by a null terminator.
         /// </summary>
@@ -63,7 +65,7 @@ namespace Sledge.Common.Extensions
         public static void WriteNullTerminatedString(this BinaryWriter bw, string str)
         {
             bw.Write(str.ToCharArray());
-            bw.Write((char) 0);
+            bw.Write((char)0);
         }
 
         /// <summary>
@@ -80,7 +82,6 @@ namespace Sledge.Common.Extensions
             return new string(chars).Trim('\0');
         }
 
-
         /// <summary>
         /// Write a length-prefixed string to the writer.
         /// </summary>
@@ -92,6 +93,7 @@ namespace Sledge.Common.Extensions
             // GH#87: RMF strings aren't prefixed in the same way .NET's BinaryReader expects
             // Write the byte length (+1) and then write that number of characters plus the null terminator.
             // Hammer doesn't like RMF strings longer than 128 bytes...
+            maximumLength--;
             if (str == null) str = "";
             if (str.Length > maximumLength) str = str.Substring(0, maximumLength);
             bw.Write((byte)(str.Length + 1));
@@ -167,7 +169,7 @@ namespace Sledge.Common.Extensions
         }
 
         // Decimal <-> Single
-        
+
         /// <summary>
         /// Read a float and cast it to decimal
         /// </summary>
@@ -175,7 +177,7 @@ namespace Sledge.Common.Extensions
         /// <returns>Value that was read</returns>
         public static decimal ReadSingleAsDecimal(this BinaryReader br)
         {
-            return (decimal) br.ReadSingle();
+            return (decimal)br.ReadSingle();
         }
 
         /// <summary>
@@ -185,7 +187,7 @@ namespace Sledge.Common.Extensions
         /// <param name="dec">Value to write</param>
         public static void WriteDecimalAsSingle(this BinaryWriter bw, decimal dec)
         {
-            bw.Write((float) dec);
+            bw.Write((float)dec);
         }
 
         // Colours
@@ -237,6 +239,45 @@ namespace Sledge.Common.Extensions
             bw.Write(c.G);
             bw.Write(c.B);
             bw.Write(c.A);
+        }
+
+        public static Vector3[] ReadVector3Array(this BinaryReader br, int num)
+        {
+            var arr = new Vector3[num];
+            for (var i = 0; i < num; i++) arr[i] = br.ReadVector3();
+            return arr;
+        }
+
+        public static Vector3 ReadVector3(this BinaryReader br)
+        {
+            return new Vector3(
+                br.ReadSingle(),
+                br.ReadSingle(),
+                br.ReadSingle()
+            );
+        }
+
+        public static void WriteVector3(this BinaryWriter bw, Vector3 c)
+        {
+            bw.Write(c.X);
+            bw.Write(c.Y);
+            bw.Write(c.Z);
+        }
+
+        public static Plane ReadPlane(this BinaryReader br)
+        {
+            return new Plane(
+                ReadVector3(br),
+                ReadVector3(br),
+                ReadVector3(br)
+            );
+        }
+
+        public static void WritePlane(this BinaryWriter bw, Vector3[] coords)
+        {
+            WriteVector3(bw, coords[0]);
+            WriteVector3(bw, coords[1]);
+            WriteVector3(bw, coords[2]);
         }
     }
 }
