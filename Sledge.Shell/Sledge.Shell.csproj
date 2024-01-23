@@ -66,8 +66,6 @@
     <Compile Include="Commands\OpenSettingsForm.cs" />
     <Compile Include="Commands\OpenFile.cs" />
     <Compile Include="Commands\ExportDocument.cs" />
-    <Compile Include="Commands\fuckyou1.cs" />
-    <Compile Include="Commands\fuckyou2.cs" />
     <Compile Include="Commands\SaveFile.cs" />
     <Compile Include="Commands\SaveFileAs.cs" />
     <Compile Include="Components\Autosaver.cs" />

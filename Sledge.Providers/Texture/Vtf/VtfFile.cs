@@ -1,3 +1,4 @@
+using SharpDX.DXGI;
 using Sledge.Common.Extensions;
 using System;
 using System.Collections.Generic;
@@ -130,9 +131,8 @@ namespace Sledge.Formats.Texture.Vtf
                     };
                 }
 
-                br.BaseStream.Position = dataPos;
-                OFFSET_BY_FUCKYOU(br);
-                for (var mip = mipmapCount; mip > 0; mip--)
+                //br.BaseStream.Position = dataPos;
+                for (var mip = Math.Max(mipmapCount - 1,1); mip > 0; mip--)
                 {
                     for (var frame = 0; frame < numFrames; frame++)
                     {
@@ -140,8 +140,8 @@ namespace Sledge.Formats.Texture.Vtf
                         {
                             for (var slice = 0; slice < depth; slice++)
                             {
-                                var wid = GetMipSize(width, mip);
-                                var hei = GetMipSize(height, mip);
+                                var wid = GetMipSize(highResImageFormat,width, mip);
+                                var hei = GetMipSize(highResImageFormat, height, mip);
                                 var size = highResFormatInfo.GetSize(wid, hei);
                                 Debug.WriteLine("mipmap "+mip+" res (x: " + wid + " | y: " + hei + ")");
 
@@ -162,18 +162,17 @@ namespace Sledge.Formats.Texture.Vtf
                 }
             }
         }
-
-        public static int MIPMAP_OFFSET = 0;
-        public static void OFFSET_BY_FUCKYOU(BinaryReader br)
-        {
-            if (MIPMAP_OFFSET <= 0) return;
-            br.ReadBytes(MIPMAP_OFFSET);
-        }
-
-        internal static int GetMipSize(int input, int level)
+        internal static int GetMipSize(VtfImageFormat format, int input, int level)
         {
             var res = input >> level;
-            if (res < 4) res = 4;
+            if (format == VtfImageFormat.Dxt1 || format == VtfImageFormat.Dxt5 || format == VtfImageFormat.Dxt3)
+            {
+                if (res < 4) res = 4;
+            }
+            else
+            {
+                if (res < 1) res = 1;
+            }
             return res;
         }
     }

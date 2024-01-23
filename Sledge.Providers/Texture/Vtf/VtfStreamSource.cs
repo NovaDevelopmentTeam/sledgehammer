@@ -133,7 +133,7 @@ namespace Sledge.Providers.Texture.Vtf
                     }
                 }
 
-                /*if (lowResImageFormat != VtfImageFormat.None)
+                if (lowResImageFormat != VtfImageFormat.None)
                 {
                     br.BaseStream.Position = thumbnailPos;
                     var thumbSize = lowResFormatInfo.GetSize(lowResWidth, lowResHeight);
@@ -149,12 +149,11 @@ namespace Sledge.Providers.Texture.Vtf
                     BitmapData bmpData = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height), ImageLockMode.WriteOnly, bmp.PixelFormat);
                     Marshal.Copy(LowResImage.GetBgra32Data(), 0, bmpData.Scan0, LowResImage.GetBgra32Data().Length);
                     bmp.UnlockBits(bmpData);
-                    return bmp;/
-                }*/
-
+                    return bmp;*/
+                }
                 br.BaseStream.Position = dataPos;
-                VtfFile.OFFSET_BY_FUCKYOU(br);
-                for (var mip = mipmapCount; mip > 0; mip--)
+
+                for (var mip = Math.Max(1,mipmapCount - 1); mip > 0; mip--)
                 {
                     for (var frame = 0; frame < numFrames; frame++)
                     {
@@ -162,8 +161,8 @@ namespace Sledge.Providers.Texture.Vtf
                         {
                             for (var slice = 0; slice < depth; slice++)
                             {
-                                var wid = VtfFile.GetMipSize(width, mip);
-                                var hei = VtfFile.GetMipSize(height, mip);
+                                var wid = VtfFile.GetMipSize(highResImageFormat, width, mip);
+                                var hei = VtfFile.GetMipSize(highResImageFormat,height, mip);
                                 var size = highResFormatInfo.GetSize(wid, hei);
 
                                 Images.Add(new VtfImage

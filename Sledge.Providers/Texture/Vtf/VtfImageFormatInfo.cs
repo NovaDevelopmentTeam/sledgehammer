@@ -118,7 +118,7 @@ namespace Sledge.Formats.Texture.Vtf
                 case VtfImageFormat.Dxt1Onebitalpha:
                     if (width < 4 && width > 0) width = 4;
                     if (height < 4 && height > 0) height = 4;
-                    return (width + 3) / 4 * ((height + 3) / 4) * 8;
+                    return width*height/2;
                 case VtfImageFormat.Dxt3:
                 case VtfImageFormat.Dxt5:
                     if (width < 4 && width > 0) width = 4;
