@@ -19,4 +19,4 @@ To use:
     * The complete build log is at /Out/Build.log
 * If you wish to disable Powershell scripts again, run: Set-ExecutionPolicy restricted
 
-InsertIcons.exe is complied from: https://github.com/einaregilsson/InsertIcons
+InsertIcons.exe is compiled from: https://github.com/einaregilsson/InsertIcons
