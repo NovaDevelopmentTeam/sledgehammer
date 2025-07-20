@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Linq;
 using System.Numerics;
 using Sledge.Rendering.Engine;
 using Sledge.Rendering.Interfaces;
@@ -22,6 +21,7 @@ namespace Sledge.Rendering.Pipelines
         private DeviceBuffer _projectionBuffer;
         private ResourceSet _projectionResourceSet;
         private ResourceLayout _transformsLayout;
+        private UniformProjection _lastProjection;
 
         public void Create(RenderContext context)
         {
@@ -65,7 +65,16 @@ namespace Sledge.Rendering.Pipelines
 
         public void SetupFrame(RenderContext context, IViewport target)
         {
-            // intentionally left blank
+            // Optional: Buffer einmal pro Frame aktualisieren, falls Model-Transformation identisch bleibt
+            // var projection = new UniformProjection
+            // {
+            //     Selective = context.SelectiveTransform,
+            //     Model = Matrix4x4.Identity,
+            //     View = target.Camera.View,
+            //     Projection = target.Camera.Projection,
+            // };
+            // cl.UpdateBuffer(_projectionBuffer, 0, projection);
+            // _lastProjection = projection;
         }
 
         public void Render(RenderContext context, IViewport target, CommandList cl, IEnumerable<IRenderable> renderables)
@@ -73,17 +82,26 @@ namespace Sledge.Rendering.Pipelines
             cl.SetPipeline(_pipeline);
             cl.SetGraphicsResourceSet(0, _projectionResourceSet);
 
-            foreach (var r in renderables.OfType<IModelRenderable>())
+            foreach (var r in renderables)
             {
-                cl.UpdateBuffer(_projectionBuffer, 0, new UniformProjection
+                if (r is IModelRenderable modelRenderable)
                 {
-                    Selective = context.SelectiveTransform,
-                    Model = r.GetModelTransformation(),
-                    View = target.Camera.View,
-                    Projection = target.Camera.Projection,
-                });
+                    var projection = new UniformProjection
+                    {
+                        Selective = context.SelectiveTransform,
+                        Model = modelRenderable.GetModelTransformation(),
+                        View = target.Camera.View,
+                        Projection = target.Camera.Projection,
+                    };
 
-                r.Render(context, this, target, cl);
+                    if (!projection.Equals(_lastProjection))
+                    {
+                        cl.UpdateBuffer(_projectionBuffer, 0, projection);
+                        _lastProjection = projection;
+                    }
+
+                    modelRenderable.Render(context, this, target, cl);
+                }
             }
         }
 
@@ -92,15 +110,21 @@ namespace Sledge.Rendering.Pipelines
             cl.SetPipeline(_pipeline);
             cl.SetGraphicsResourceSet(0, _projectionResourceSet);
 
-            if (renderable is IModelRenderable r)
+            if (renderable is IModelRenderable modelRenderable)
             {
-                cl.UpdateBuffer(_projectionBuffer, 0, new UniformProjection
+                var projection = new UniformProjection
                 {
                     Selective = context.SelectiveTransform,
-                    Model = r.GetModelTransformation(),
+                    Model = modelRenderable.GetModelTransformation(),
                     View = target.Camera.View,
                     Projection = target.Camera.Projection,
-                });
+                };
+
+                if (!projection.Equals(_lastProjection))
+                {
+                    cl.UpdateBuffer(_projectionBuffer, 0, projection);
+                    _lastProjection = projection;
+                }
             }
 
             renderable.Render(context, this, target, cl, locationObject);
@@ -114,12 +138,12 @@ namespace Sledge.Rendering.Pipelines
 
         public void Dispose()
         {
-            _projectionResourceSet?.Dispose();
-            _projectionBuffer?.Dispose();
-            _pipeline?.Dispose();
-            _transformsLayout?.Dispose();
-            _vertex?.Dispose();
-            _fragment?.Dispose();
+            _projectionResourceSet?.Dispose(); _projectionResourceSet = null;
+            _projectionBuffer?.Dispose(); _projectionBuffer = null;
+            _pipeline?.Dispose(); _pipeline = null;
+            _transformsLayout?.Dispose(); _transformsLayout = null;
+            _vertex?.Dispose(); _vertex = null;
+            _fragment?.Dispose(); _fragment = null;
         }
     }
 }
