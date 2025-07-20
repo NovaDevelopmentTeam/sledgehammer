@@ -1,35 +1,34 @@
 ; Sledge NSIS Installer
 ; ---------------------
+!define PRODUCT_NAME "Sledge Editor"
+!define PRODUCT_VERSION "{version}"
 
-; Installer Info
-Name "Sledge"
-OutFile "Sledge.Editor.{version}.exe"
-InstallDir "$PROGRAMFILES\Sledge Editor"
+Name "${PRODUCT_NAME}"
+OutFile "${PRODUCT_NAME}.${PRODUCT_VERSION}.exe"
+InstallDir "$PROGRAMFILES\${PRODUCT_NAME}"
 InstallDirRegKey HKLM "Software\Sledge\Editor" "InstallDir"
 RequestExecutionLevel admin
 
 ; Version Info
-VIProductVersion "{version}"
-VIAddVersionKey "FileVersion" "{version}"
-VIAddVersionKey "ProductName" "Sledge Editor"
-VIAddVersionKey "FileDescription" "Installer for Sledge Editor"
+VIProductVersion "${PRODUCT_VERSION}"
+VIAddVersionKey "FileVersion" "${PRODUCT_VERSION}"
+VIAddVersionKey "ProductName" "${PRODUCT_NAME}"
+VIAddVersionKey "FileDescription" "Installer for ${PRODUCT_NAME}"
 VIAddVersionKey "LegalCopyright" "http://logic-and-trick.com 2018"
 
-; Ensure Admin Rights
 !include LogicLib.nsh
 
 Function .onInit
     UserInfo::GetAccountType
     pop $0
-    ${If} $0 != "admin" ;Require admin rights on NT4+
+    ${If} $0 != "admin"
         MessageBox mb_iconstop "Administrator rights required!" /SD IDOK
-        SetErrorLevel 740 ;ERROR_ELEVATION_REQUIRED
+        SetErrorLevel 740
         Quit
     ${EndIf}
 FunctionEnd
 
 ; Installer Pages
-
 Page components
 Page directory
 Page instfiles
@@ -39,10 +38,10 @@ UninstPage instfiles
 
 ; Installer Sections
 
-Section "Sledge Editor"
-    IfSilent 0 +2 ; Silent mode: Sledge has executed the installer for an update
-        Sleep 2000 ; Make sure the program has shut down...
-    
+Section "${PRODUCT_NAME}"
+    IfSilent 0 +2
+        Sleep 2000
+
     SectionIn RO
     SetOutPath $INSTDIR
 
@@ -56,8 +55,8 @@ Section "Sledge Editor"
     File /r "Build\*"
     
     WriteRegStr HKLM "Software\Sledge\Editor" "InstallDir" "$INSTDIR"
-    WriteRegStr HKLM "Software\Sledge\Editor" "Version" "{version}"
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SledgeEditor" "DisplayName" "Sledge Editor"
+    WriteRegStr HKLM "Software\Sledge\Editor" "Version" "${PRODUCT_VERSION}"
+    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SledgeEditor" "DisplayName" "${PRODUCT_NAME}"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SledgeEditor" "UninstallString" '"$INSTDIR\Uninstall.exe"'
     WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SledgeEditor" "NoModify" 1
     WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SledgeEditor" "NoRepair" 1
@@ -66,32 +65,32 @@ SectionEnd
 
 Section "Start Menu Shortcuts"
     IfSilent 0 +2
-        Goto end ; Silent update: Don't redo shortcuts
-        
+        Goto end
+
     SetShellVarContext all
-    CreateDirectory "$SMPROGRAMS\Sledge Editor"
-    CreateShortCut "$SMPROGRAMS\Sledge Editor\Uninstall.lnk" "$INSTDIR\Uninstall.exe" "" "$INSTDIR\Uninstall.exe" 0
-    CreateShortCut "$SMPROGRAMS\Sledge Editor\Sledge Editor.lnk" "$INSTDIR\Sledge.Editor.exe" "" "$INSTDIR\Sledge.Editor.exe" 0
+    CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
+    CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\Uninstall.lnk" "$INSTDIR\Uninstall.exe" "" "$INSTDIR\Uninstall.exe" 0
+    CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk" "$INSTDIR\Sledge.Editor.exe" "" "$INSTDIR\Sledge.Editor.exe" 0
 
     end:
 SectionEnd
 
 Section "Desktop Shortcut"
     IfSilent 0 +2
-        Goto end ; Silent update: Don't redo shortcuts
-    
+        Goto end
+
     SetShellVarContext all
-    CreateShortCut "$DESKTOP\Sledge Editor.lnk" "$INSTDIR\Sledge.Editor.exe" "" "$INSTDIR\Sledge.Editor.exe" 0
-    
+    CreateShortCut "$DESKTOP\${PRODUCT_NAME}.lnk" "$INSTDIR\Sledge.Editor.exe" "" "$INSTDIR\Sledge.Editor.exe" 0
+
     end:
 SectionEnd
 
-Section "Run Sledge After Installation"
+Section "Run ${PRODUCT_NAME} After Installation"
     SetAutoClose true
     Exec "$INSTDIR\Sledge.Editor.exe"
 SectionEnd
 
-; Uninstall
+; Uninstall Section
 
 Section "Uninstall"
 
@@ -99,10 +98,14 @@ Section "Uninstall"
   DeleteRegKey HKLM "Software\Sledge\Editor"
 
   SetShellVarContext all
-  Delete "$SMPROGRAMS\Sledge Editor\*.*"
-  Delete "$DESKTOP\Sledge Editor.lnk"
+  Delete "$SMPROGRAMS\${PRODUCT_NAME}\*.*"
+  Delete "$DESKTOP\${PRODUCT_NAME}.lnk"
 
-  RMDir /r "$SMPROGRAMS\Sledge Editor"
+  RMDir /r "$SMPROGRAMS\${PRODUCT_NAME}"
   RMDir /r "$INSTDIR"
 
 SectionEnd
+
+; Optional: Uncomment for language support
+; !include "MUI2.nsh"
+; !insertmacro MUI_LANGUAGE "English"
