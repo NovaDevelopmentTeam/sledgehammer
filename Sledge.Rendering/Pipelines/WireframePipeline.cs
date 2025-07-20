@@ -1,6 +1,5 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Numerics;
-using System.Runtime.CompilerServices;
 using Sledge.Rendering.Engine;
 using Sledge.Rendering.Primitives;
 using Sledge.Rendering.Renderables;
@@ -9,7 +8,7 @@ using Veldrid;
 
 namespace Sledge.Rendering.Pipelines
 {
-    public class WireframePipeline : IPipeline
+    public class WireframePipeline : IPipeline, IDisposable
     {
         public PipelineType Type => PipelineType.Wireframe;
         public PipelineGroup Group => PipelineGroup.Opaque;
@@ -32,7 +31,10 @@ namespace Sledge.Rendering.Pipelines
                 RasterizerState = RasterizerStateDescription.Default,
                 PrimitiveTopology = PrimitiveTopology.LineList,
                 ResourceLayouts = new[] { context.ResourceLoader.ProjectionLayout },
-                ShaderSet = new ShaderSetDescription(new[] { context.ResourceLoader.VertexStandardLayoutDescription }, new[] { _vertex, _fragment }),
+                ShaderSet = new ShaderSetDescription(
+                    new[] { context.ResourceLoader.VertexStandardLayoutDescription },
+                    new[] { _vertex, _fragment }
+                ),
                 Outputs = new OutputDescription
                 {
                     ColorAttachments = new[] { new OutputAttachmentDescription(PixelFormat.B8_G8_R8_A8_UNorm) },
@@ -84,7 +86,8 @@ namespace Sledge.Rendering.Pipelines
 
         public void Bind(RenderContext context, CommandList cl, string binding)
         {
-            //
+            // Not used in this pipeline. If the interface requires it, leave empty or throw:
+            // throw new NotImplementedException();
         }
 
         public void Dispose()
