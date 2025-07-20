@@ -1,16 +1,15 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
-using System.Windows.Forms;
-using SharpDX.Direct3D;
+using System.Threading.Tasks;
+using Veldrid;
 using Sledge.Rendering.Cameras;
 using Sledge.Rendering.Interfaces;
 using Sledge.Rendering.Pipelines;
 using Sledge.Rendering.Renderables;
 using Sledge.Rendering.Viewports;
-using Veldrid;
 
 namespace Sledge.Rendering.Engine
 {
@@ -20,51 +19,43 @@ namespace Sledge.Rendering.Engine
         public static EngineInterface Interface { get; } = new EngineInterface();
 
         public GraphicsDevice Device { get; }
-        public Thread RenderThread { get; private set; }
         public Scene Scene { get; }
         internal RenderContext Context { get; }
 
-        private CancellationTokenSource _token;
-
-        private readonly GraphicsDeviceOptions _options;
-        private readonly Stopwatch _timer;
-        private readonly object _lock = new object();
-        private readonly List<IViewport> _renderTargets;
-        private readonly Dictionary<PipelineGroup, List<IPipeline>> _pipelines;
+        private CancellationTokenSource _token = new();
+        private Stopwatch _timer = new();
+        private readonly object _lock = new();
+        private readonly List<IViewport> _renderTargets = new();
+        private readonly Dictionary<PipelineGroup, List<IPipeline>> _pipelines = new();
         private readonly CommandList _commandList;
 
         private RgbaFloat _clearColourPerspective;
         private RgbaFloat _clearColourOrthographic;
 
+        // Events for viewport lifecycle
+        internal event EventHandler<IViewport> ViewportCreated;
+        internal event EventHandler<IViewport> ViewportDestroyed;
+
         private Engine()
         {
-            _options = new GraphicsDeviceOptions
+            var options = new GraphicsDeviceOptions
             {
                 HasMainSwapchain = false,
                 ResourceBindingModel = ResourceBindingModel.Improved,
-                SwapchainDepthFormat = PixelFormat.R32_Float,
+                SwapchainDepthFormat = PixelFormat.R32_Float
             };
 
-            Device = GraphicsDevice.CreateD3D11(_options);
+            Device = GraphicsDevice.CreateD3D11(options);
             DetectFeatures(Device);
             Scene = new Scene();
-
+            Context = new RenderContext(Device);
             _commandList = Device.ResourceFactory.CreateCommandList();
 
             SetClearColour(CameraType.Both, RgbaFloat.Black);
 
-            _timer = new Stopwatch();
-            _token = new CancellationTokenSource();
-
-            _renderTargets = new List<IViewport>();
-            _pipelines = new Dictionary<PipelineGroup, List<IPipeline>>();
-            Context = new RenderContext(Device);
-            Scene.Add(Context);
 #if DEBUG
             Scene.Add(new FpsMonitor());
 #endif
-
-            RenderThread = new Thread(Loop);
 
             _pipelines.Add(PipelineGroup.Opaque, new List<IPipeline>());
             _pipelines.Add(PipelineGroup.Transparent, new List<IPipeline>());
@@ -81,19 +72,15 @@ namespace Sledge.Rendering.Engine
             AddPipeline(new BillboardAlphaPipeline());
 
             AddPipeline(new OverlayPipeline());
-
-            Application.ApplicationExit += Shutdown;
         }
 
         private void DetectFeatures(GraphicsDevice device)
         {
-            var dev = device.GetType().GetProperty("Device");
-            var dxd = dev?.GetValue(device) as SharpDX.Direct3D11.Device;
-            var fl = dxd?.FeatureLevel ?? FeatureLevel.Level_10_0; // Just assume it's DX10, whatever
+            var dev = device.GetType().GetProperty("Device")?.GetValue(device) as SharpDX.Direct3D11.Device;
+            var fl = dev?.FeatureLevel ?? FeatureLevel.Level_10_0; // Default to DX10
             if (fl < FeatureLevel.Level_10_0)
             {
-                MessageBox.Show($"Sledge requires DirectX 10, but your computer only has version {fl}.", "Unsupported graphics card!");
-                Environment.Exit(1);
+                throw new InvalidOperationException($"Sledge requires DirectX 10, but your computer only has version {fl}.");
             }
             Features.FeatureLevel = fl;
         }
@@ -102,9 +89,18 @@ namespace Sledge.Rendering.Engine
         {
             lock (_lock)
             {
-                if (type == CameraType.Both) _clearColourOrthographic = _clearColourPerspective = colour;
-                else if (type == CameraType.Orthographic) _clearColourOrthographic = colour;
-                else _clearColourPerspective = colour;
+                if (type == CameraType.Both)
+                {
+                    _clearColourOrthographic = _clearColourPerspective = colour;
+                }
+                else if (type == CameraType.Orthographic)
+                {
+                    _clearColourOrthographic = colour;
+                }
+                else
+                {
+                    _clearColourPerspective = colour;
+                }
             }
         }
 
@@ -120,89 +116,47 @@ namespace Sledge.Rendering.Engine
 
         public void Dispose()
         {
-            _pipelines.SelectMany(x => x.Value).ToList().ForEach(x => x.Dispose());
+            foreach (var pipeline in _pipelines.SelectMany(x => x.Value))
+                pipeline.Dispose();
+
             _pipelines.Clear();
 
-            _renderTargets.ForEach(x => x.Dispose());
-            _renderTargets.Clear();
+            foreach (var rt in _renderTargets)
+                rt.Dispose();
 
+            _renderTargets.Clear();
             Device.Dispose();
             _token.Dispose();
         }
 
-        private void Shutdown(object sender, EventArgs e)
-        {
-            Dispose();
-            Application.ApplicationExit -= Shutdown;
-        }
-
-        // Render loop
-
-        private void Start()
+        public async Task StartAsync()
         {
             _timer.Start();
-            RenderThread.Start(_token.Token);
+            await Task.Run(() => RenderLoop(_token.Token));
         }
 
-        private void Stop()
+        public void Stop()
         {
             _token.Cancel();
             _timer.Stop();
-
-            RenderThread = new Thread(Loop);
             _token = new CancellationTokenSource();
         }
 
-
-        private int _paused = 0;
-        private readonly ManualResetEvent _pauseThreadEvent = new ManualResetEvent(false);
-
-        public IDisposable Pause()
+        private void RenderLoop(CancellationToken token)
         {
-            _paused++;
-            if (_timer.IsRunning) _pauseThreadEvent.WaitOne();
-            return new PauseImpl(() =>
+            var lastFrame = _timer.ElapsedMilliseconds;
+            while (!token.IsCancellationRequested)
             {
-                _paused--;
-                _pauseThreadEvent.Reset();
-            });
-        }
-        private class PauseImpl : IDisposable
-        {
-            private readonly Action _disposeAction;
-            public PauseImpl(Action disposeFunc) => _disposeAction = disposeFunc;
-            public void Dispose() => _disposeAction();
-        }
-
-        private void Loop(object o)
-        {
-            var token = (CancellationToken) o;
-            try
-            {
-                var lastFrame = _timer.ElapsedMilliseconds;
-                while (!token.IsCancellationRequested)
+                var frame = _timer.ElapsedMilliseconds;
+                var diff = frame - lastFrame;
+                if (diff < 16) // ~60 FPS
                 {
-                    var frame = _timer.ElapsedMilliseconds;
-                    var diff = (frame - lastFrame);
-                    if (diff < 16 || _paused > 0)
-                    {
-                        if (_paused > 0) _pauseThreadEvent.Set();
-                        Thread.Sleep(2);
-                        continue;
-                    }
-
-                    lastFrame = frame;
-                    Render(frame);
-                    Device.WaitForIdle();
+                    Thread.Sleep(2);
+                    continue;
                 }
-            }
-            catch (ThreadInterruptedException)
-            {
-                // exit
-            }
-            catch (ThreadAbortException)
-            {
-                // exit
+                lastFrame = frame;
+                Render(frame);
+                Device.WaitForIdle();
             }
         }
 
@@ -236,37 +190,14 @@ namespace Sledge.Rendering.Engine
                 : _clearColourOrthographic;
             _commandList.ClearColorTarget(0, cc);
 
-            //foreach (var group in _pipelines.OrderBy(x => (int) x.Key))
-            //{
-            //    foreach (var pipeline in group.Value.OrderBy(x => x.Order))
-            //    {
-            //        pipeline.SetupFrame(Context, renderTarget);
-            //    }
-            //}
-
-            //var renderables = _pipelines.ToDictionary(x => x, x => Scene.GetRenderables(x, renderTarget).OrderBy(r => r.Order).ToList());
-
-            // foreach (var pg in _pipelines.GroupBy(x => x.Group).OrderBy(x => x.Key))
-            // {
-            //     foreach (var pipeline in pg.OrderBy(x => x.Order))
-            //     {
-            //         if (!renderables.ContainsKey(pipeline)) continue;
-            //         pipeline.Render(Context, renderTarget, _commandList, renderables[pipeline]);
-            //     }
-            // 
-            //     foreach (var pipeline in pg.OrderBy(x => x.Order))
-            //     {
-            //         if (!renderables.ContainsKey(pipeline)) continue;
-            //         pipeline.RenderTransparent(Context, renderTarget, _commandList, renderables[pipeline]);
-            //     }
-            // }
-
+            // Opaque pipelines
             foreach (var opaque in _pipelines[PipelineGroup.Opaque])
             {
                 opaque.SetupFrame(Context, renderTarget);
                 opaque.Render(Context, renderTarget, _commandList, Scene.GetRenderables(opaque, renderTarget));
             }
 
+            // Transparent pipelines (sorted by distance)
             {
                 var cameraLocation = renderTarget.Camera.Location;
                 var transparentPipelines = _pipelines[PipelineGroup.Transparent];
@@ -276,13 +207,12 @@ namespace Sledge.Rendering.Engine
                     transparent.SetupFrame(Context, renderTarget);
                 }
 
-                // Get the location objects and sort them by distance from the camera
                 var locationObjects =
                     from t in transparentPipelines
                     from renderable in Scene.GetRenderables(t, renderTarget)
                     from location in renderable.GetLocationObjects(t, renderTarget)
                     orderby (cameraLocation - location.Location).LengthSquared() descending
-                    select new {Pipeline = t, Renderable = renderable, Location = location};
+                    select new { Pipeline = t, Renderable = renderable, Location = location };
 
                 foreach (var lo in locationObjects)
                 {
@@ -290,35 +220,36 @@ namespace Sledge.Rendering.Engine
                 }
             }
 
+            // Overlay pipelines
             foreach (var overlay in _pipelines[PipelineGroup.Overlay])
             {
                 overlay.SetupFrame(Context, renderTarget);
                 overlay.Render(Context, renderTarget, _commandList, Scene.GetRenderables(overlay, renderTarget));
             }
-            
-            _commandList.End();
 
+            _commandList.End();
             Device.SubmitCommands(_commandList);
             Device.SwapBuffers(renderTarget.Swapchain);
         }
 
-        // Viewports
-
-        internal event EventHandler<IViewport> ViewportCreated;
-        internal event EventHandler<IViewport> ViewportDestroyed;
-
+        // Viewport management
         internal IViewport CreateViewport()
         {
             lock (_lock)
             {
-                var control = new Viewports.Viewport(Device, _options);
+                var control = new Viewports.Viewport(Device, new GraphicsDeviceOptions
+                {
+                    HasMainSwapchain = false,
+                    ResourceBindingModel = ResourceBindingModel.Improved,
+                    SwapchainDepthFormat = PixelFormat.R32_Float
+                });
                 control.Disposed += DestroyViewport;
 
-                if (!_renderTargets.Any()) Start();
+                if (!_renderTargets.Any()) _ = StartAsync();
                 _renderTargets.Add(control);
 
-                Scene.Add((IRenderable) control.Overlay);
-                Scene.Add((IUpdateable) control.Overlay);
+                Scene.Add((IRenderable)control.Overlay);
+                Scene.Add((IUpdateable)control.Overlay);
                 ViewportCreated?.Invoke(this, control);
 
                 return control;
@@ -327,7 +258,7 @@ namespace Sledge.Rendering.Engine
 
         private void DestroyViewport(object viewport, EventArgs e)
         {
-            if (!(viewport is IViewport t)) return;
+            if (viewport is not IViewport t) return;
 
             lock (_lock)
             {
@@ -337,8 +268,8 @@ namespace Sledge.Rendering.Engine
                 if (!_renderTargets.Any()) Stop();
 
                 ViewportDestroyed?.Invoke(this, t);
-                Scene.Remove((IRenderable) t.Overlay);
-                Scene.Remove((IUpdateable) t.Overlay);
+                Scene.Remove((IRenderable)t.Overlay);
+                Scene.Remove((IUpdateable)t.Overlay);
 
                 t.Control.Disposed -= DestroyViewport;
                 t.Dispose();
