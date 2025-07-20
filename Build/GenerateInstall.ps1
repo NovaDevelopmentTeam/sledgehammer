@@ -1,70 +1,94 @@
-# Find app install locations
+#region Settings & Error Handling
+$ErrorActionPreference = "Stop"
+#endregion
+
+#region Find Tool Install Locations
 
 # MSBuild
-$vswhere = [System.Environment]::ExpandEnvironmentVariables("%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe")
+$vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+if (-not (Test-Path $vswhere)) { throw "vswhere.exe not found at $vswhere" }
 $vspath = & $vswhere -latest -requires Microsoft.Component.MSBuild -property installationPath
-$msbuild = join-path $vspath 'MSBuild\15.0\Bin\MSBuild.exe'
+if (-not $vspath) { throw "No Visual Studio with MSBuild found!" }
+$msbuild = Join-Path $vspath 'MSBuild\15.0\Bin\MSBuild.exe'
+if (-not (Test-Path $msbuild)) { throw "MSBuild.exe not found at $msbuild" }
 
 # 7-zip
-if (Test-Path 'HKLM:\SOFTWARE\7-Zip') {
-    $7zip = Join-Path (Get-ItemProperty 'HKLM:\SOFTWARE\7-Zip').Path "7z.exe"
-} else {
-    $7zip = Join-Path (Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\7-Zip').Path "7z.exe"
-}
+$sevenZipReg = Get-ItemProperty 'HKLM:\SOFTWARE\7-Zip' -ErrorAction SilentlyContinue
+if (-not $sevenZipReg) { $sevenZipReg = Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\7-Zip' -ErrorAction SilentlyContinue }
+if (-not $sevenZipReg) { throw "7-Zip not installed!" }
+$sevenZip = Join-Path $sevenZipReg.Path "7z.exe"
+if (-not (Test-Path $sevenZip)) { throw "7z.exe not found at $sevenZip" }
 
 # NSIS
-if (Test-Path 'HKLM:\SOFTWARE\NSIS') {
-    $nsis = Join-Path (Get-ItemProperty 'HKLM:\SOFTWARE\NSIS').'(default)' "makensis.exe"
-} else {
-    $nsis = Join-Path (Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\NSIS').'(default)' "makensis.exe"
-}
+$nsisReg = Get-ItemProperty 'HKLM:\SOFTWARE\NSIS' -ErrorAction SilentlyContinue
+if (-not $nsisReg) { $nsisReg = Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\NSIS' -ErrorAction SilentlyContinue }
+if (-not $nsisReg) { throw "NSIS not installed!" }
+$nsisPath = if ($nsisReg.PSChildName -eq '(default)') { $nsisReg.'(default)' } else { $nsisReg.InstallDir }
+$nsis = Join-Path $nsisPath "makensis.exe"
+if (-not (Test-Path $nsis)) { throw "makensis.exe not found at $nsis" }
 
-# Ensure we're in the build folder
-$scriptpath = $MyInvocation.MyCommand.Path
-$scriptdir = Split-Path $scriptpath
+#endregion
+
+#region Working Directory
+$scriptdir = Split-Path $MyInvocation.MyCommand.Path
 Set-Location $scriptdir
+#endregion
 
-# Delete existing out directory
-If (Test-Path './Out') { Remove-Item './Out' -recurse }
+#region Output Directory
+$outDir = Join-Path $scriptdir 'Out'
+if (Test-Path $outDir) { Remove-Item $outDir -Recurse -Force }
+New-Item $outDir -ItemType Directory | Out-Null
+$buildDir = Join-Path $outDir 'Build'
+New-Item $buildDir -ItemType Directory | Out-Null
+$logFile = Join-Path $buildDir 'Build.log'
+Set-Content $logFile ""
+#endregion
 
-# Create out directories and log file
-(New-Item './Out' -ItemType directory) | Out-Null
-(New-Item './Out/Build' -ItemType directory) | Out-Null
-$log = './Out/Build.log'
-(Set-Content $log '')
+#region Compile Shaders
+Write-Host "Compiling shaders..."
+$shaderCompile = & "..\Sledge.Rendering\Shaders\compile-shaders.ps1"
+$shaderCompile | Out-File $logFile -Append
+#endregion
 
-$outputPath = Resolve-Path './Out/Build'
+#region Build Project
+Write-Host "Building Solution..."
+$msbuildArgs = @("../Sledge.sln", "/p:Configuration=Release", "/p:OutputPath=$buildDir")
+& $msbuild $msbuildArgs | Out-File $logFile -Append
+#endregion
 
-# Compile the shaders
-$content = & "..\Sledge.Rendering\Shaders\compile-shaders.ps1"
-$content | Add-Content $log
+#region Clean Up
+# Remove unnecessary files
+# Remove-Item "$buildDir\*.pdb" -ErrorAction SilentlyContinue
+Remove-Item "$buildDir\*.xml" -ErrorAction SilentlyContinue
+#endregion
 
-# Build the project
-echo 'Building Solution...'
-(& $msbuild '../Sledge.sln' '/p:Configuration=Release' "/p:OutputPath=$outputPath") | Add-Content $log
+#region Version Information
+$exePath = Join-Path $buildDir 'Sledge.Editor.exe'
+if (-not (Test-Path $exePath)) { throw "Build failed, Sledge.Editor.exe not found!" }
+$versionInfo = (Get-Command $exePath).FileVersionInfo
+$version = $versionInfo.ProductVersion
+if (-not $version) { throw "Cannot read version from $exePath" }
+Write-Host "Version is $version."
+#endregion
 
-#(& del '.\Out\Build\*.pdb') | Add-Content $log
-(& del '.\Out\Build\*.xml') | Add-Content $log
+#region Archive
+$zipPath = Join-Path $outDir "Sledge.Editor.$version.zip"
+Write-Host "Creating Archive..."
+& $sevenZip 'a' '-tzip' '-r' $zipPath "$buildDir\*.*" | Out-File $logFile -Append
+#endregion
 
-$version = (Get-Command './Out/Build/Sledge.Editor.exe').FileVersionInfo.ProductVersion
-$zipfile = './Out/Sledge.Editor.' + $version + '.zip'
-$exefile = './Out/Sledge.Editor.' + $version + '.zip'
-$nsifile = './Out/Sledge.Editor.Installer.' + $version + '.nsi'
-$verfile = './Out/version.txt'
+#region Installer
+$nsifile = Join-Path $outDir "Sledge.Editor.Installer.$version.nsi"
+Write-Host "Creating Installer..."
+(Get-Content '.\Sledge.Editor.Installer.nsi') -replace '\{version\}', $version | Set-Content $nsifile
+& $nsis $nsifile | Out-File $logFile -Append
+#endregion
 
-echo ('Version is ' + $version + '.')
-echo 'Creating Archive...'
-(& $7zip 'a' '-tzip' '-r' $zipfile './Out/Build/*.*') | Add-Content $log
-
-echo 'Creating Installer...'
-Set-Content $nsifile ((Get-Content '.\Sledge.Editor.Installer.nsi') -replace "\{version\}", $version)
-
-(& $nsis $nsifile) | Add-Content $log
-
-echo 'Creating Version File...'
+#region Version File
+$verfile = Join-Path $outDir 'version.txt'
 $date = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
-#https://github.com/LogicAndTrick/sledge/releases/download/pre-alpha/Sledge.Editor.0.1.0.0.zip
-$url ='https://github.com/LogicAndTrick/sledge/releases/download/' + $version + '/Sledge.Editor.' + $version + '.zip'
-Set-Content $verfile $version, $date, $url
+$url = "https://github.com/LogicAndTrick/sledge/releases/download/$version/Sledge.Editor.$version.zip"
+Set-Content $verfile "$version`n$date`n$url"
+#endregion
 
-echo 'Done.'
+Write-Host "Done."
