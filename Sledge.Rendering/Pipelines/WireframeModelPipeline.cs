@@ -1,6 +1,7 @@
-using System.Runtime.CompilerServices;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using Sledge.Rendering.Engine;
 using Sledge.Rendering.Interfaces;
 using Sledge.Rendering.Primitives;
@@ -19,10 +20,13 @@ namespace Sledge.Rendering.Pipelines
         private Shader _vertex;
         private Shader _fragment;
         private Pipeline _pipeline;
+
         private DeviceBuffer _projectionBuffer;
         private ResourceSet _projectionResourceSet;
+
         private ResourceLayout _transformsLayout;
-        private UniformProjection _lastProjection;
+        private DeviceBuffer _transformsBuffer;
+        private ResourceSet _transformsResourceSet;
 
         public void Create(RenderContext context)
         {
@@ -58,51 +62,56 @@ namespace Sledge.Rendering.Pipelines
             _projectionBuffer = context.Device.ResourceFactory.CreateBuffer(
                 new BufferDescription((uint)Unsafe.SizeOf<UniformProjection>(), BufferUsage.UniformBuffer)
             );
-
             _projectionResourceSet = context.Device.ResourceFactory.CreateResourceSet(
                 new ResourceSetDescription(context.ResourceLoader.ProjectionLayout, _projectionBuffer)
+            );
+
+            // NEW: Bone transforms buffer & resource set (128 matrices)
+            _transformsBuffer = context.Device.ResourceFactory.CreateBuffer(
+                new BufferDescription((uint)(Unsafe.SizeOf<Matrix4x4>() * 128), BufferUsage.UniformBuffer)
+            );
+            _transformsResourceSet = context.Device.ResourceFactory.CreateResourceSet(
+                new ResourceSetDescription(_transformsLayout, _transformsBuffer)
             );
         }
 
         public void SetupFrame(RenderContext context, IViewport target)
         {
-            // Optional: Buffer einmal pro Frame aktualisieren, falls Model-Transformation identisch bleibt
-            // var projection = new UniformProjection
-            // {
-            //     Selective = context.SelectiveTransform,
-            //     Model = Matrix4x4.Identity,
-            //     View = target.Camera.View,
-            //     Projection = target.Camera.Projection,
-            // };
-            // cl.UpdateBuffer(_projectionBuffer, 0, projection);
-            // _lastProjection = projection;
+            // You could update global transforms here, if needed
         }
 
         public void Render(RenderContext context, IViewport target, CommandList cl, IEnumerable<IRenderable> renderables)
         {
             cl.SetPipeline(_pipeline);
             cl.SetGraphicsResourceSet(0, _projectionResourceSet);
+            cl.SetGraphicsResourceSet(1, _transformsResourceSet);
 
-            foreach (var r in renderables)
+            foreach (var r in renderables.OfType<IModelRenderable>())
             {
-                if (r is IModelRenderable modelRenderable)
+                cl.UpdateBuffer(_projectionBuffer, 0, new UniformProjection
                 {
-                    var projection = new UniformProjection
-                    {
-                        Selective = context.SelectiveTransform,
-                        Model = modelRenderable.GetModelTransformation(),
-                        View = target.Camera.View,
-                        Projection = target.Camera.Projection,
-                    };
+                    Selective = context.SelectiveTransform,
+                    Model = r.GetModelTransformation(),
+                    View = target.Camera.View,
+                    Projection = target.Camera.Projection,
+                });
 
-                    if (!projection.Equals(_lastProjection))
-                    {
-                        cl.UpdateBuffer(_projectionBuffer, 0, projection);
-                        _lastProjection = projection;
-                    }
-
-                    modelRenderable.Render(context, this, target, cl);
+                // Update bone transforms if available
+                Matrix4x4[] boneMatrices = r.GetBoneMatrices(); // Should return 128 or less
+                if (boneMatrices != null && boneMatrices.Length > 0)
+                {
+                    // Pad to 128 if needed
+                    Matrix4x4[] padded = new Matrix4x4[128];
+                    boneMatrices.CopyTo(padded, 0);
+                    cl.UpdateBuffer(_transformsBuffer, 0, padded);
                 }
+                else
+                {
+                    // Zero out if not used
+                    cl.UpdateBuffer(_transformsBuffer, 0, new Matrix4x4[128]);
+                }
+
+                r.Render(context, this, target, cl);
             }
         }
 
@@ -110,21 +119,28 @@ namespace Sledge.Rendering.Pipelines
         {
             cl.SetPipeline(_pipeline);
             cl.SetGraphicsResourceSet(0, _projectionResourceSet);
+            cl.SetGraphicsResourceSet(1, _transformsResourceSet);
 
-            if (renderable is IModelRenderable modelRenderable)
+            if (renderable is IModelRenderable r)
             {
-                var projection = new UniformProjection
+                cl.UpdateBuffer(_projectionBuffer, 0, new UniformProjection
                 {
                     Selective = context.SelectiveTransform,
-                    Model = modelRenderable.GetModelTransformation(),
+                    Model = r.GetModelTransformation(),
                     View = target.Camera.View,
                     Projection = target.Camera.Projection,
-                };
+                });
 
-                if (!projection.Equals(_lastProjection))
+                Matrix4x4[] boneMatrices = r.GetBoneMatrices();
+                if (boneMatrices != null && boneMatrices.Length > 0)
                 {
-                    cl.UpdateBuffer(_projectionBuffer, 0, projection);
-                    _lastProjection = projection;
+                    Matrix4x4[] padded = new Matrix4x4[128];
+                    boneMatrices.CopyTo(padded, 0);
+                    cl.UpdateBuffer(_transformsBuffer, 0, padded);
+                }
+                else
+                {
+                    cl.UpdateBuffer(_transformsBuffer, 0, new Matrix4x4[128]);
                 }
             }
 
@@ -141,6 +157,8 @@ namespace Sledge.Rendering.Pipelines
         {
             _projectionResourceSet?.Dispose(); _projectionResourceSet = null;
             _projectionBuffer?.Dispose(); _projectionBuffer = null;
+            _transformsResourceSet?.Dispose(); _transformsResourceSet = null;
+            _transformsBuffer?.Dispose(); _transformsBuffer = null;
             _pipeline?.Dispose(); _pipeline = null;
             _transformsLayout?.Dispose(); _transformsLayout = null;
             _vertex?.Dispose(); _vertex = null;
