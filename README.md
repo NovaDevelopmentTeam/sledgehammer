@@ -8,7 +8,7 @@ Sledgehammer Editor is an editor built to support Source Engine assets, while re
 > _If you find any issues with the editor, please report them in the [Issues](https://github.com/PROJECT-DESTINATION/sledgehammer/issues) tab - if possible include the crash reporter info._
 
 > [!IMPORTANT]
-> _This editor is built off [Sledge](https://github.com/PROJECT-DESTINATION/sledgehammer)._
+> _This editor is built off [Sledgehammer](https://github.com/PROJECT-DESTINATION/sledgehammer)._
 
 ## Original Sledge Editor description
 Sledge is an open-source alternative to Valve's Hammer Editor for the Goldsource engine.
